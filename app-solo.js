@@ -96,10 +96,13 @@ els.pacingMode.addEventListener("change", () => {
 });
 
 els.speedInput.addEventListener("input", updateStats);
+
+// 僅在使用者手動拖動滑桿時覆寫 CSS 變數，初始化時保留 CSS 媒體查詢斷點
 els.fontSizeInput.addEventListener("input", () => {
   els.fsVal.textContent = `${els.fontSizeInput.value}px`;
   document.documentElement.style.setProperty("--font-size", `${els.fontSizeInput.value}px`);
 });
+
 els.lineHeightInput.addEventListener("input", () => {
   els.lhVal.textContent = els.lineHeightInput.value;
   document.documentElement.style.setProperty("--line-height", els.lineHeightInput.value);
@@ -240,6 +243,17 @@ document.addEventListener("keydown", (e) => {
       e.preventDefault();
       els.micModal.classList.add("hidden");
       els.micBtn.focus();
+      return;
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const focusables = [els.micCancelBtn, els.micConfirmBtn];
+      const idx = focusables.indexOf(document.activeElement);
+      const nextIdx = e.shiftKey
+        ? (idx + focusables.length - 1) % focusables.length
+        : (idx + 1) % focusables.length;
+      focusables[nextIdx].focus();
+      return;
     }
     return;
   }
@@ -248,6 +262,9 @@ document.addEventListener("keydown", (e) => {
 
   if (e.code === "Space") {
     e.preventDefault();
+    if (document.activeElement instanceof HTMLButtonElement) {
+      document.activeElement.blur();
+    }
     engine.state.isPlaying ? engine.stopPlayback() : engine.startPlayback();
   } else if (e.code === "ArrowDown" || e.code === "ArrowRight" || e.code === "PageDown") {
     e.preventDefault();
@@ -255,7 +272,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.code === "ArrowUp" || e.code === "ArrowLeft" || e.code === "PageUp") {
     e.preventDefault();
     if (engine.state.mode === "popup") engine.goToChunk(engine.state.currentIndex - 1);
-  } else if (e.key === "f" || e.key === "F") {
+  } else if ((e.key === "f" || e.key === "F") && !e.ctrlKey && !e.metaKey && !e.altKey) {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
     } else {
