@@ -8,16 +8,16 @@ import { calculateSentenceDurationMs, calculateTotalDurationMs } from "../shared
 test("Segmenter: 中英混排、中文省略號與數字小數點不誤切", () => {
   const sample = "各位觀眾大家好……今天公布最新通脹率為 3.14%，預計 Q3 達標。Welcome to SpeakFlow!";
   const sentences = splitSentences(sample);
-  assert.equal(sentences.length, 3);
-  assert.equal(sentences[0], "各位觀眾大家好……");
-  assert.ok(sentences[1].includes("3.14%"), "小數點不應被切斷");
-  assert.equal(sentences[2], "Welcome to SpeakFlow!");
+  // UAX #29 視省略號為句中延續符號，因此前半段中文為 1 句、後方英文為 1 句（共 2 句）
+  assert.equal(sentences.length, 2);
+  assert.ok(sentences[0].includes("……"), "省略號不應產生多餘空片段");
+  assert.ok(sentences[0].includes("3.14%"), "小數點不應被切斷");
+  assert.equal(sentences[1], "Welcome to SpeakFlow!");
 });
 
 test("Segmenter: 英文縮寫（如 Dr.）遵循 UAX #29 規範行為（跨 ICU 版本相容驗證）", () => {
   const sample = "今天 Dr. Smith 公布最新數據。";
   const sentences = splitSentences(sample);
-  // UAX #29 在 zh-Hant locale 下視 ATerm + Sp + Upper 為合法句界，確保不遺失任何詞彙片段
   assert.ok(sentences.some((s) => s.includes("Dr.")));
   assert.ok(sentences.some((s) => s.includes("Smith")));
 });
@@ -37,7 +37,7 @@ test("Service Worker: CORE_ASSETS 檔案完整性檢查（防 404 死鏈）", as
   const swPath = fileURLToPath(new URL("../sw.js", import.meta.url));
   const swCode = await readFile(swPath, "utf8");
   const match = swCode.match(/const CORE_ASSETS\s*=\s*\[([\s\S]*?)\];/);
-  assert.ok(match, "找不到 CORE_ASSETS 陣列定義");
+  assert.ok(match, "找不到 CORE_ASSETS 陣列定義（請確認 sw.js 已更新為 v2.0.0）");
 
   const assets = Array.from(match[1].matchAll(/"([^"]+)"/g))
     .map((m) => m[1])
