@@ -1,5 +1,57 @@
-if (isHtml) {
-    // HTML 入口（index.html / dual.html）採 Network-First，斷網時回退快取或友善離線提示頁
+// 發佈紀律：每次修改前端檔案後必須遞增 CACHE_VERSION，
+// 以觸發 activate 事件清理舊版快取並釋放瀏覽器儲存配額。
+const CACHE_VERSION = "speakflow-v2.0.0";
+
+const CORE_ASSETS = [
+  "./",
+  "./index.html",
+  "./styles.css",
+  "./app-solo.js",
+  "./shared/i18n.js",
+  "./shared/segmenter.js",
+  "./shared/pacing.js",
+  "./shared/vad.js",
+  "./shared/scroll-engine.js",
+  "./shared/storage.js",
+  "./shared/prompter-core.js",
+  "./manifest-solo.json",
+  "./icon.svg"
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_VERSION).then(async (cache) => {
+      await Promise.allSettled(
+        CORE_ASSETS.map((url) =>
+          cache.add(url).catch((err) => console.warn("[SW] Core cache miss:", url, err))
+        )
+      );
+    })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys.filter((key) => key !== CACHE_VERSION).map((key) => caches.delete(key))
+      )
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  const isHtml =
+    event.request.mode === "navigate" ||
+    event.request.headers.get("accept")?.includes("text/html");
+
+  if (isHtml) {
     event.respondWith(
       fetch(event.request)
         .then((res) => {
@@ -23,4 +75,21 @@ if (isHtml) {
           );
         })
     );
+  } else {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        const networkFetch = fetch(event.request)
+          .then((res) => {
+            if (res && res.status === 200) {
+              const copy = res.clone();
+              caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, copy));
+            }
+            return res;
+          })
+          .catch(() => cached);
+
+        return cached || networkFetch;
+      })
+    );
   }
+});
