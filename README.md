@@ -209,4 +209,5 @@ Open browser DevTools (`F12` / `Cmd+Option+I`) and check the **Console** tab. Ty
 
 ### License
 
-MIT License · Maintained by **Joint Applied Research (J.A.R.)**
+MIT License
+
