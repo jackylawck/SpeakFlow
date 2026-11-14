@@ -61,14 +61,11 @@ jobs:
         run: |
           mkdir -p dist
           cp index.html dual.html styles.css \
-             app-solo.js app-dual.js \
-             sw.js \
-             manifest-solo.json manifest-dual.json \
-             icon.svg \
-             dist/
-          [ -f icon-180.png ] && cp icon-180.png dist/ || true
-          [ -f SpeakFlow192icon.png ] && cp SpeakFlow192icon.png dist/ || true
-          [ -f SpeakFlow512icon.png ] && cp SpeakFlow512icon.png dist/ || true
+            app-solo.js app-dual.js \
+            sw.js \
+            manifest-solo.json manifest-dual.json \
+            SpeakFlow192icon.png SpeakFlow512icon.png \
+            dist/
           cp -r shared dist/
           cp -r dual dist/
           if [ -f vendor/peerjs.esm.js ]; then
