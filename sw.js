@@ -1,6 +1,6 @@
 // 發佈紀律：每次修改前端檔案後必須遞增 CACHE_VERSION，
 // 以觸發 activate 事件清理舊版快取並釋放瀏覽器儲存配額。
-const CACHE_VERSION = "speakflow-v2.0.1";
+const CACHE_VERSION = "speakflow-v2.1.0";
 
 const CORE_ASSETS = [
   "./",
