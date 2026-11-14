@@ -1,0 +1,86 @@
+name: Verify & Deploy SpeakFlow
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Quality & Security Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (Built-in Test Runner)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run zero-dependency unit & integrity tests
+        run: node --test tests/
+
+      - name: Audit CSP & no-inline-script discipline
+        run: |
+          # 1. 確保單機版 index.html 維持絕對嚴格的 connect-src 'self'
+          grep -q "connect-src 'self';" index.html || (echo "❌ index.html CSP connect-src 遭放寬！" && exit 1)
+          # 2. 確保雙機版 dual.html 保留 WebRTC 信令權限
+          grep -q "connect-src 'self' wss://0.peerjs.com" dual.html || (echo "❌ dual.html CSP 缺少 WebRTC 信令白名單！" && exit 1)
+          # 3. 確保雙入口沒有內聯 <script> 區塊
+          if grep -E "<script[^>]*>[^<]+</script>" index.html dual.html; then
+            echo "❌ 偵測到內聯腳本，違反嚴格 CSP script-src 'self'！"
+            exit 1
+          fi
+          echo "✅ 雙入口 CSP 與零內聯規範檢查通過"
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Stage only runtime assets
+        run: |
+          mkdir -p dist
+          cp index.html dual.html styles.css \
+             app-solo.js app-dual.js \
+             sw.js \
+             manifest-solo.json manifest-dual.json \
+             icon.svg icon-180.png \
+             dist/
+          cp -r shared dist/
+          cp -r dual dist/
+          if [ -f vendor/peerjs.esm.js ]; then
+            mkdir -p dist/vendor
+            cp vendor/peerjs.esm.js dist/vendor/
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload static artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./dist"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
