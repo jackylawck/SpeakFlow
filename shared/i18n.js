@@ -11,7 +11,11 @@ const DICT = {
     roomCodeLabel: "房號：",
     pinCodeLabel: "PIN：",
     connWaiting: "等待後台驗證連線",
+    connVerifying: "⏳ 驗證連線中...",
     connConnected: "🟢 後台已驗證連線",
+    connDisconnected: "🔴 連線已中斷",
+    remoteStandby: "📡 雙機模式待命",
+    remoteConnected: "🟢 導播已連線",
     btnCopyLink: "🔗 複製含 PIN 連線網址",
     btnResetPair: "🔄 重置房號 / PIN",
     btnUnlockDirector: "🔓 解除導播鎖定",
@@ -25,6 +29,8 @@ const DICT = {
     directorLivePlaceholder: "在此修改新聞稿，點擊下方按鈕即可即時同步至主播提詞器...",
     btnPushScript: "🚀 立即推送更新至提詞器",
     ctrlToggleRemote: "⏯ 播放 / 暫停",
+    metaModePopup: "逐句模式",
+    metaModeScroll: "滾動模式",
     scriptPlaceholder: "貼上中文、英文或中英混排新聞稿...\n\n系統內建 Unicode UAX #29 語意斷句引擎，不會誤切 Dr. Smith、3.14 或省略號……",
     storageSessionHint: "🔒 目前僅暫存於分頁記憶體（關閉分頁即自動清除）",
     storageLocalSaved: "⚠️ 已儲存於本機瀏覽器（共用裝置播畢請務必清除）",
@@ -102,7 +108,11 @@ const DICT = {
     roomCodeLabel: "Room:",
     pinCodeLabel: "PIN:",
     connWaiting: "Waiting for PIN Handshake",
+    connVerifying: "⏳ Verifying Connection...",
     connConnected: "🟢 Director Authenticated",
+    connDisconnected: "🔴 Disconnected",
+    remoteStandby: "📡 Dual Mode Standby",
+    remoteConnected: "🟢 Director Connected",
     btnCopyLink: "🔗 Copy Link with PIN",
     btnResetPair: "🔄 Reset Room / PIN",
     btnUnlockDirector: "🔓 Unlock Director",
@@ -116,6 +126,8 @@ const DICT = {
     directorLivePlaceholder: "Edit script here and push live updates directly to the anchor's prompter...",
     btnPushScript: "🚀 Push Live Script Update",
     ctrlToggleRemote: "⏯ Play / Pause",
+    metaModePopup: "Sentence Mode",
+    metaModeScroll: "Smooth Scroll",
     scriptPlaceholder: "Paste your Chinese, English, or bilingual news script here...\n\nPowered by Unicode UAX #29 segmentation: Dr. Smith, 3.14, and ellipses stay intact.",
     storageSessionHint: "🔒 Tab-only memory (auto-wiped when tab closes)",
     storageLocalSaved: "⚠️ Saved in local browser storage (clear after use on shared devices)",
@@ -187,7 +199,8 @@ const DICT = {
 
 function readInitialLang() {
   try {
-    return localStorage.getItem(LANG_KEY) || "zh";
+    const saved = localStorage.getItem(LANG_KEY);
+    return saved === "en" ? "en" : "zh";
   } catch {
     return "zh";
   }
@@ -195,23 +208,39 @@ function readInitialLang() {
 
 let currentLang = readInitialLang();
 
+export function getLang() {
+  return currentLang;
+}
+
 export function t(key, ...args) {
   const entry = DICT[currentLang]?.[key] ?? DICT.zh?.[key];
   if (entry === undefined) return key;
   return typeof entry === "function" ? entry(...args) : entry;
 }
 
-export function applyTranslations() {
-  document.documentElement.lang = currentLang === "zh" ? "zh-Hant" : "en";
-  document.querySelectorAll("[data-i18n]").forEach((el) => {
+export function applyTranslations(root = document) {
+  if (root === document) {
+    document.documentElement.lang = currentLang === "zh" ? "zh-HK" : "en";
+  }
+
+  root.querySelectorAll("[data-i18n]").forEach((el) => {
     const key = el.getAttribute("data-i18n");
-    const val = t(key);
-    if (val !== undefined) el.textContent = val;
+    if (key) el.textContent = t(key);
   });
-  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+
+  root.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
     const key = el.getAttribute("data-i18n-placeholder");
-    const val = t(key);
-    if (val !== undefined) el.setAttribute("placeholder", val);
+    if (key) el.setAttribute("placeholder", t(key));
+  });
+
+  root.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-title");
+    if (key) el.setAttribute("title", t(key));
+  });
+
+  root.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-aria-label");
+    if (key) el.setAttribute("aria-label", t(key));
   });
 }
 
