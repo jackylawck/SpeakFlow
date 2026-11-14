@@ -3,13 +3,14 @@
   --panel: #13171f;
   --text: #f3f4f6;
   --muted-text: rgba(243, 244, 246, 0.22);
+  --upcoming-text: rgba(243, 244, 246, 0.42);
   --accent: #3b82f6;
   --accent-active: #1d4ed8;
   --danger: #ef4444;
   --success: #10b981;
   --border: #262c38;
-  --font-size: 48px;
-  --line-height: 1.6;
+  --font-size: 46px;
+  --line-height: 1.55;
 }
 
 body.high-contrast {
@@ -17,6 +18,7 @@ body.high-contrast {
   --panel: #0a0a0a;
   --text: #ffffff;
   --muted-text: rgba(255, 255, 255, 0.18);
+  --upcoming-text: rgba(255, 255, 255, 0.38);
   --accent: #facc15;
   --border: #333333;
 }
@@ -344,22 +346,22 @@ textarea:focus {
 
 .eyeline {
   position: absolute;
-  top: 36%;
+  top: 30%;
   left: 0;
   right: 0;
-  border-top: 2px dashed rgba(59, 130, 246, 0.5);
+  border-top: 2px dashed rgba(59, 130, 246, 0.45);
   pointer-events: none;
   z-index: 5;
 }
 
 body.high-contrast .eyeline {
-  border-top-color: rgba(250, 204, 21, 0.75);
+  border-top-color: rgba(250, 204, 21, 0.65);
 }
 
 .eyeline::before {
   content: "▶";
   position: absolute;
-  left: 12px;
+  left: 8px;
   top: -11px;
   color: var(--accent);
   font-size: 14px;
@@ -380,6 +382,7 @@ body.high-contrast .eyeline {
 
 #stage-viewport {
   flex: 1;
+  width: 100%;
   position: relative;
   overflow: hidden;
   touch-action: pan-x pinch-zoom;
@@ -400,39 +403,40 @@ body.high-contrast .eyeline {
 }
 
 #scroll-track {
-  padding: 32vh 8vw 55vh;
+  width: 100%;
+  padding: 26vh 3vw 58vh;
   will-change: transform;
 }
 
 .chunk {
+  display: block;
   font-size: var(--font-size);
   line-height: var(--line-height);
-  margin-bottom: 0.75em;
-  color: var(--muted-text);
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 0.35s ease, transform 0.35s ease, color 0.25s ease;
-  display: none;
+  margin-bottom: 0.7em;
+  color: var(--upcoming-text);
+  transition: font-size 0.25s ease, color 0.25s ease, opacity 0.25s ease;
   cursor: pointer;
 }
 
 .chunk.revealed {
-  display: block;
-  opacity: 1;
-  transform: translateY(0);
+  color: var(--muted-text);
 }
 
 .chunk.revealed.peek {
   color: rgba(255, 255, 255, 0.88);
-  transition: color 0.15s ease;
+}
+
+.chunk.upcoming {
+  color: var(--upcoming-text);
 }
 
 .chunk.active {
-  display: block;
-  opacity: 1;
+  font-size: calc(var(--font-size) * 1.2);
+  line-height: 1.48;
   color: var(--text);
-  font-weight: 600;
-  transform: translateY(0);
+  font-weight: 700;
+  margin-top: 0.15em;
+  margin-bottom: 0.8em;
 }
 
 .smooth-text {
