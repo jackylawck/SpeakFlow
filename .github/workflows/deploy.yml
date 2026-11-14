@@ -30,7 +30,7 @@ jobs:
           node-version: "22"
 
       - name: Run zero-dependency unit & integrity tests
-        run: node --test tests/
+        run: node --test "tests/**/*.test.mjs"
 
       - name: Audit CSP & no-inline-script discipline
         run: |
