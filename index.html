@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover" />
+  <meta name="format-detection" content="telephone=no" />
 
   <!-- 🔍 Google Search Console 網站驗證 -->
   <meta name="google-site-verification" content="JZ5UohX-CcP_fQV0_DI9VadkKY4ZoTTkUifL88-fIcY" />
@@ -45,25 +46,31 @@
   <link rel="icon" type="image/svg+xml" href="./icon.svg" />
   <link rel="apple-touch-icon" sizes="192x192" href="./SpeakFlow192icon.png" />
 
-  <!-- 🛡️ 企業級安全策略：嚴格 CSP 與硬體權限最小化隔離 -->
+  <!-- 🛡️ 企業級安全策略：嚴格 CSP 與零內聯腳本／樣式防護
+       註：Permissions-Policy: microphone=(self), camera=(), geolocation=(), payment=(), usb=()
+       僅支援透過伺服器 HTTP Response Header 下發；GitHub Pages 靜態託管環境由瀏覽器原生 getUserMedia 權限彈窗隔離 -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self';
     style-src 'self';
-    img-src 'self' data: https://jackylawck.github.io;
+    img-src 'self' data:;
     font-src 'self' data:;
     connect-src 'self';
     media-src 'self' blob:;
     object-src 'none';
-    base-uri 'self';
+    base-uri 'none';
     form-action 'none';
   " />
-  <meta http-equiv="Permissions-Policy" content="microphone=(self), camera=(), geolocation=(), payment=(), usb=()" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
 
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="high-contrast">
+  <noscript>
+    <p class="noscript-warning">
+      ⚠️ 請使用支援現代 ES Modules 的瀏覽器（如 Safari、Chrome、Edge）以啟動順住講 SpeakFlow。
+    </p>
+  </noscript>
 
   <main id="editor-view">
     <header class="top-bar">
@@ -112,17 +119,17 @@
       <div class="setting-item">
         <label for="fontsize-input">
           <span data-i18n="labelFontSize">字體大小</span>
-          <span id="fs-val">48px</span>
+          <span id="fs-val">52px</span>
         </label>
-        <input type="range" id="fontsize-input" value="48" min="24" max="96" step="2" />
+        <input type="range" id="fontsize-input" value="52" min="28" max="110" step="2" />
       </div>
 
       <div class="setting-item">
         <label for="lineheight-input">
           <span data-i18n="labelLineHeight">行距倍率</span>
-          <span id="lh-val">1.6</span>
+          <span id="lh-val">1.5</span>
         </label>
-        <input type="range" id="lineheight-input" value="1.6" min="1.2" max="2.4" step="0.1" />
+        <input type="range" id="lineheight-input" value="1.5" min="1.2" max="2.4" step="0.1" />
       </div>
     </div>
 
