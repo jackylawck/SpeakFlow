@@ -1,0 +1,13 @@
+{
+  "name": "順住講 SpeakFlow｜單機新聞提詞器",
+  "short_name": "順住講",
+  "description": "Zero-backend offline teleprompter with UAX #29 segmentation, dynamic pacing, and PPT quick-step.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "./icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
