@@ -1,17 +1,66 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-HK" prefix="og: https://ogp.me/ns#">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover" />
+
+  <!-- 🔍 Google Search Console 網站驗證 -->
+  <meta name="google-site-verification" content="JZ5UohX-CcP_fQV0_DI9VadkKY4ZoTTkUifL88-fIcY" />
+
+  <!-- 🔍 基礎 SEO 核心標籤 -->
+  <title>🎙️ 順住講 SpeakFlow | 零後端雙語新聞提詞器 (Teleprompter PWA)</title>
+  <meta name="description" content="順住講 SpeakFlow 是一款專為獨立記者、自媒體與直播設計的零後端雙語提詞器。內建 Unicode UAX #29 語意斷句、動態語速配時、PPT 隨時搶拍與本地音壓跟讀，字順著人的節奏走。" />
+  <meta name="keywords" content="順住講, SpeakFlow, 提詞器, 讀稿機, Teleprompter, 新聞讀稿, PWA, 離線提詞器, 雙語提詞, 直播工具, iPad提詞器" />
+  <meta name="author" content="J.A.R. Applied Research" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://jackylawck.github.io/SpeakFlow/" />
+
+  <!-- 🌐 Open Graph / Facebook / LinkedIn / WhatsApp 社交卡片 -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://jackylawck.github.io/SpeakFlow/" />
+  <meta property="og:title" content="🎙️ 順住講 SpeakFlow | 字順著人的節奏走" />
+  <meta property="og:description" content="免註冊、免後端、100% 離線可用的專業雙語提詞器。支援逐句動態配時、PPT 手動搶拍與雙機導播遙控。" />
+  <meta property="og:image" content="https://jackylawck.github.io/SpeakFlow/SpeakFlow512icon.png" />
+  <meta property="og:image:width" content="512" />
+  <meta property="og:image:height" content="512" />
+  <meta property="og:image:alt" content="順住講 SpeakFlow 專業新聞提詞器標誌" />
+  <meta property="og:locale" content="zh_HK" />
+  <meta property="og:site_name" content="順住講 SpeakFlow" />
+
+  <!-- 🐦 Twitter / X Cards -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="🎙️ 順住講 SpeakFlow | Bilingual Teleprompter PWA" />
+  <meta name="twitter:description" content="零後端雙語新聞提詞器：UAX #29 語意斷句、動態配時、PPT 搶拍與本地音壓門控。" />
+  <meta name="twitter:image" content="https://jackylawck.github.io/SpeakFlow/SpeakFlow512icon.png" />
+
+  <!-- 📱 PWA 與手機主畫面安裝設定 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="順住講" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#000000" />
-  <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';" />
-  <title>順住講 SpeakFlow｜零後端雙語新聞提詞器</title>
+  <meta name="application-name" content="順住講 SpeakFlow" />
   <link rel="manifest" href="./manifest-solo.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./SpeakFlow192icon.png" />
   <link rel="icon" type="image/svg+xml" href="./icon.svg" />
-  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="./SpeakFlow192icon.png" />
+
+  <!-- 🛡️ 企業級安全策略：嚴格 CSP 與硬體權限最小化隔離 -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self';
+    img-src 'self' data: https://jackylawck.github.io;
+    font-src 'self' data:;
+    connect-src 'self';
+    media-src 'self' blob:;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+  " />
+  <meta http-equiv="Permissions-Policy" content="microphone=(self), camera=(), geolocation=(), payment=(), usb=()" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body class="high-contrast">
