@@ -64,6 +64,8 @@ export class PrompterEngine {
       wakeLock: null
     };
 
+    // 快取 .chunk 節點引用；僅由 mountScript 重建，外部請勿直接操作 scrollTrack
+    this._chunkNodes = [];
     this._unloadHandler = null;
 
     this.scrollEngine = new SmoothScrollEngine({
@@ -199,6 +201,7 @@ export class PrompterEngine {
   }
 
   goToChunk(idx) {
+    if (this.state.mode !== "popup" || !this.state.items.length) return;
     const clamped = Math.max(0, Math.min(idx, this.state.items.length - 1));
     this.state.currentIndex = clamped;
     this.state.sentenceStartedAt = 0;
@@ -208,7 +211,8 @@ export class PrompterEngine {
   }
 
   renderChunks() {
-    const nodes = this.els.scrollTrack.querySelectorAll(".chunk");
+    if (!this.state.items.length) return;
+    const nodes = this._chunkNodes;
     let activeNode = null;
 
     nodes.forEach((node, idx) => {
@@ -224,7 +228,10 @@ export class PrompterEngine {
     });
 
     if (activeNode) {
-      const targetOffset = activeNode.offsetTop - this.els.stageViewport.clientHeight * 0.28;
+      // 強制同步 reflow，確保 offsetTop 讀取的是 font-size 放大後的最終排版座標
+      void activeNode.offsetWidth;
+      // 將當前句「頂部邊緣」對齊視口 30% 基準線（作為視線起點導引，不遮擋文字本體）
+      const targetOffset = activeNode.offsetTop - this.els.stageViewport.clientHeight * 0.30;
       const clampedY = Math.max(0, targetOffset);
       this.els.scrollTrack.style.transition = "transform 0.38s cubic-bezier(0.22, 1, 0.36, 1)";
       this.els.scrollTrack.style.transform = `translate3d(0, -${clampedY}px, 0)`;
@@ -267,6 +274,7 @@ export class PrompterEngine {
       this.els.nextBtn.classList.remove("hidden");
 
       const fragment = document.createDocumentFragment();
+      const nodes = [];
       this.state.items.forEach((item, idx) => {
         const div = document.createElement("div");
         div.className = "chunk";
@@ -280,11 +288,14 @@ export class PrompterEngine {
           }
           this.goToChunk(idx);
         });
+        nodes.push(div);
         fragment.appendChild(div);
       });
+      this._chunkNodes = nodes;
       this.els.scrollTrack.replaceChildren(fragment);
       this.renderChunks();
     } else {
+      this._chunkNodes = [];
       this.els.stageViewport.dataset.scrollMode = "1";
       this.els.prevBtn.classList.add("hidden");
       this.els.nextBtn.classList.add("hidden");
