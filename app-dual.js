@@ -4,12 +4,36 @@ import { calculateSentenceDurationMs, calculateTotalDurationMs } from "./shared/
 import { initScriptStorage } from "./shared/storage.js";
 import { PrompterEngine, showToast } from "./shared/prompter-core.js";
 import { createQrSvgElement } from "./dual/qr-svg.js";
-import * as PeerMod from "./vendor/peerjs.esm.js";
+import { initEasterEgg } from "./shared/easter-egg.js";
 
-const PeerCtor = PeerMod.Peer || PeerMod.default || window.Peer;
 const PEER_PREFIX = "speakflow-room-";
+const BC_PREFIX = "speakflow-bc-";
 const MAX_PIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 5 * 60 * 1000;
+const CONNECT_TIMEOUT_MS = 10 * 1000;
+const MAX_PUSH_SCRIPT_CHARS = 50000;
+
+let cachedPeerCtor = window.Peer || null;
+let peerLoadAttempted = false;
+
+async function resolvePeerCtor() {
+  if (cachedPeerCtor) return cachedPeerCtor;
+  if (peerLoadAttempted) return null;
+  peerLoadAttempted = true;
+  try {
+    const mod = await import("./vendor/peerjs.esm.js");
+    cachedPeerCtor = mod.Peer || mod.default || window.Peer || null;
+  } catch {
+    cachedPeerCtor = null;
+  }
+  return cachedPeerCtor;
+}
+
+function createSessionId() {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 const els = {
   editorView: document.getElementById("editor-view"),
@@ -90,15 +114,25 @@ const dualState = {
   role: "prompter",
   roomCode: "",
   pinCode: "",
+  hostInitSeq: 0,
   hostPeer: null,
+  hostBc: null,
+  hostConnected: false,
   activeDirectorConn: null,
+  lockedDirectorSessionId: null,
   failedPinAttempts: 0,
   lockoutUntil: 0,
+  directorSessionId: createSessionId(),
   directorPeer: null,
   directorConn: null,
+  directorBc: null,
+  directorStatusKey: "connWaiting",
+  connectTimeoutId: null,
+  lastDirectorState: null,
   lastDirectorActiveIdx: -1,
   armedIdx: -1,
-  armedTimer: null
+  armedTimer: null,
+  lastArmHintAt: 0
 };
 
 const engine = new PrompterEngine({
@@ -130,25 +164,48 @@ function buildPairUrl() {
 
 function renderHostQr() {
   if (!els.hostQrBox) return;
-  const svg = createQrSvgElement(buildPairUrl(), 116);
-  if (svg) {
-    els.hostQrBox.replaceChildren(svg);
-  } else {
+  const pairUrl = buildPairUrl();
+  if (pairUrl.length > 260) {
+    els.hostQrBox.textContent = "QR";
+    showToast(els.toastContainer, t("toastQrTooLong"), true);
+    return;
+  }
+  try {
+    const svg = createQrSvgElement(pairUrl, 116);
+    if (svg) {
+      els.hostQrBox.replaceChildren(svg);
+    } else {
+      els.hostQrBox.textContent = "QR";
+    }
+  } catch {
     els.hostQrBox.textContent = "QR";
   }
 }
 
 function setHostConnectionUi(connected) {
+  dualState.hostConnected = Boolean(connected);
   if (connected) {
     els.hostConnBadge.classList.add("connected");
-    els.hostConnBadge.textContent = "🟢 導播已驗證連線";
+    els.hostConnBadge.textContent = t("connConnected");
     // 鏡頭防穿幫設計：全螢幕讀稿時僅顯示已連線狀態，絕不暴露房號與 PIN
-    els.prompterRemoteText.textContent = "🟢 導播已連線";
+    els.prompterRemoteText.textContent = t("remoteConnected");
   } else {
     els.hostConnBadge.classList.remove("connected");
     els.hostConnBadge.textContent = t("connWaiting");
-    els.prompterRemoteText.textContent = "📡 雙機模式待命";
+    els.prompterRemoteText.textContent = t("remoteStandby");
   }
+}
+
+function setDirectorStatusUi(key, connected = false) {
+  dualState.directorStatusKey = key;
+  els.directorConnStatus.classList.toggle("connected", connected);
+  els.directorConnStatus.textContent = t(key);
+}
+
+function updateUnlockButtonVisibility() {
+  const isLockedOut = Date.now() < dualState.lockoutUntil;
+  const hasSessionLock = Boolean(dualState.lockedDirectorSessionId);
+  els.unlockDirectorBtn.classList.toggle("hidden", !isLockedOut && !hasSessionLock);
 }
 
 function buildFullStatePayload() {
@@ -179,23 +236,31 @@ function buildFullStatePayload() {
   };
 }
 
-function broadcastFullState() {
+function sendToDirector(payload) {
   if (dualState.activeDirectorConn?.open) {
-    dualState.activeDirectorConn.send(buildFullStatePayload());
+    dualState.activeDirectorConn.send(payload);
+  }
+  if (dualState.hostBc && dualState.lockedDirectorSessionId) {
+    dualState.hostBc.postMessage({
+      ...payload,
+      targetSessionId: dualState.lockedDirectorSessionId
+    });
   }
 }
 
+function broadcastFullState() {
+  sendToDirector(buildFullStatePayload());
+}
+
 function broadcastIndexOnly() {
-  if (dualState.activeDirectorConn?.open) {
-    dualState.activeDirectorConn.send({
-      type: "STATE_INDEX",
-      view: engine.state.view,
-      mode: engine.state.mode,
-      isPlaying: engine.state.isPlaying,
-      currentIndex: engine.state.currentIndex,
-      total: engine.state.items.length
-    });
-  }
+  sendToDirector({
+    type: "STATE_INDEX",
+    view: engine.state.view,
+    mode: engine.state.mode,
+    isPlaying: engine.state.isPlaying,
+    currentIndex: engine.state.currentIndex,
+    total: engine.state.items.length
+  });
 }
 
 function handleDirectorCommand(msg) {
@@ -244,6 +309,11 @@ function handleDirectorCommand(msg) {
 
     case "CMD_PUSH_SCRIPT": {
       if (typeof msg.rawScript !== "string" || !msg.rawScript.trim()) return;
+      if (msg.rawScript.length > MAX_PUSH_SCRIPT_CHARS) {
+        sendToDirector({ type: "SCRIPT_REJECTED", reason: "TOO_LONG" });
+        return;
+      }
+
       const nextText = msg.rawScript;
       els.scriptInput.value = nextText;
       storage.saveSessionNow(nextText);
@@ -260,7 +330,7 @@ function handleDirectorCommand(msg) {
         });
         if (wasPlaying) engine.startPlayback();
       }
-      showToast(els.toastContainer, "🚀 導播已推送最新稿件並自動錨定位置");
+      showToast(els.toastContainer, t("toastRemoteUpdated"));
       broadcastFullState();
       break;
     }
@@ -285,6 +355,40 @@ function handleDirectorCommand(msg) {
   }
 }
 
+function evaluateHostAuth(pinInput, sessionId) {
+  const now = Date.now();
+  if (now < dualState.lockoutUntil) {
+    const remainingSec = Math.max(1, Math.ceil((dualState.lockoutUntil - now) / 1000));
+    return { ok: false, reason: "LOCKED", remainingSec };
+  }
+
+  if (String(pinInput || "").trim() !== dualState.pinCode) {
+    dualState.failedPinAttempts += 1;
+    const remaining = Math.max(0, MAX_PIN_ATTEMPTS - dualState.failedPinAttempts);
+    if (dualState.failedPinAttempts >= MAX_PIN_ATTEMPTS) {
+      dualState.lockoutUntil = now + LOCKOUT_DURATION_MS;
+      updateUnlockButtonVisibility();
+      showToast(els.toastContainer, t("toastPinLockedHost"), true);
+      const remainingSec = Math.ceil(LOCKOUT_DURATION_MS / 1000);
+      return { ok: false, reason: "LOCKED", remainingSec };
+    }
+    return { ok: false, reason: "INVALID_PIN", remaining };
+  }
+
+  if (
+    dualState.lockedDirectorSessionId &&
+    sessionId &&
+    dualState.lockedDirectorSessionId !== sessionId
+  ) {
+    return { ok: false, reason: "ROOM_LOCKED" };
+  }
+
+  dualState.failedPinAttempts = 0;
+  dualState.lockedDirectorSessionId = sessionId || createSessionId();
+  updateUnlockButtonVisibility();
+  return { ok: true };
+}
+
 function destroyHostPeer() {
   if (dualState.activeDirectorConn) {
     try {
@@ -298,25 +402,82 @@ function destroyHostPeer() {
     } catch {}
     dualState.hostPeer = null;
   }
+  if (dualState.hostBc) {
+    try {
+      dualState.hostBc.close();
+    } catch {}
+    dualState.hostBc = null;
+  }
+  dualState.lockedDirectorSessionId = null;
   setHostConnectionUi(false);
 }
 
-function initHostPeer() {
+async function initHostPeer() {
+  const seq = ++dualState.hostInitSeq;
   destroyHostPeer();
-  if (!PeerCtor) {
-    showToast(els.toastContainer, "⚠️ 找不到 PeerJS 模組，雙機連線無法啟動", true);
-    return;
-  }
 
   dualState.roomCode = generateRoomCode();
   dualState.pinCode = generatePinCode();
   dualState.failedPinAttempts = 0;
   dualState.lockoutUntil = 0;
+  dualState.lockedDirectorSessionId = null;
 
   els.hostRoomCode.textContent = dualState.roomCode;
   els.hostPinCode.textContent = dualState.pinCode;
   els.unlockDirectorBtn.classList.add("hidden");
   renderHostQr();
+
+  // 1. 啟用同機雙分頁 BroadcastChannel 同步通道（零伺服器延遲）
+  if ("BroadcastChannel" in window) {
+    const bc = new BroadcastChannel(`${BC_PREFIX}${dualState.roomCode}`);
+    dualState.hostBc = bc;
+    bc.onmessage = (ev) => {
+      const msg = ev.data;
+      if (!msg || typeof msg !== "object") return;
+
+      if (msg.type === "AUTH") {
+        const res = evaluateHostAuth(msg.pin, msg.sessionId);
+        if (res.ok) {
+          setHostConnectionUi(true);
+          bc.postMessage({ type: "AUTH_OK", targetSessionId: msg.sessionId });
+          bc.postMessage({
+            ...buildFullStatePayload(),
+            targetSessionId: msg.sessionId
+          });
+          showToast(els.toastContainer, t("connConnected"));
+        } else {
+          bc.postMessage({
+            type: "AUTH_ERR",
+            reason: res.reason,
+            remaining: res.remaining,
+            remainingSec: res.remainingSec,
+            targetSessionId: msg.sessionId
+          });
+        }
+        return;
+      }
+
+      if (
+        dualState.lockedDirectorSessionId &&
+        msg.sessionId === dualState.lockedDirectorSessionId
+      ) {
+        if (msg.type === "DIRECTOR_BYE") {
+          setHostConnectionUi(false);
+          return;
+        }
+        handleDirectorCommand(msg);
+      }
+    };
+  }
+
+  // 2. 動態解析並啟用跨裝置 PeerJS WebRTC 通道
+  const PeerCtor = await resolvePeerCtor();
+  if (seq !== dualState.hostInitSeq) return;
+
+  if (!PeerCtor) {
+    showToast(els.toastContainer, t("toastHostLocalOnly"));
+    return;
+  }
 
   const peer = new PeerCtor(`${PEER_PREFIX}${dualState.roomCode}`);
   dualState.hostPeer = peer;
@@ -330,15 +491,9 @@ function initHostPeer() {
       if (!authenticated) {
         if (data.type !== "AUTH") return;
 
-        if (Date.now() < dualState.lockoutUntil) {
-          conn.send({ type: "AUTH_ERR", reason: "LOCKED" });
-          setTimeout(() => conn.close(), 150);
-          return;
-        }
-
-        if (String(data.pin || "").trim() === dualState.pinCode) {
+        const res = evaluateHostAuth(data.pin, data.sessionId);
+        if (res.ok) {
           authenticated = true;
-          dualState.failedPinAttempts = 0;
           if (dualState.activeDirectorConn && dualState.activeDirectorConn !== conn) {
             try {
               dualState.activeDirectorConn.close();
@@ -348,16 +503,14 @@ function initHostPeer() {
           setHostConnectionUi(true);
           conn.send({ type: "AUTH_OK" });
           conn.send(buildFullStatePayload());
-          showToast(els.toastContainer, "🟢 導播控制台已通過 PIN 驗證並連線");
+          showToast(els.toastContainer, t("connConnected"));
         } else {
-          dualState.failedPinAttempts += 1;
-          const remaining = Math.max(0, MAX_PIN_ATTEMPTS - dualState.failedPinAttempts);
-          if (dualState.failedPinAttempts >= MAX_PIN_ATTEMPTS) {
-            dualState.lockoutUntil = Date.now() + LOCKOUT_DURATION_MS;
-            els.unlockDirectorBtn.classList.remove("hidden");
-            showToast(els.toastContainer, "🔒 連續 5 次 PIN 錯誤，已鎖定連線 5 分鐘", true);
-          }
-          conn.send({ type: "AUTH_ERR", reason: "INVALID_PIN", remaining });
+          conn.send({
+            type: "AUTH_ERR",
+            reason: res.reason,
+            remaining: res.remaining,
+            remainingSec: res.remainingSec
+          });
           setTimeout(() => conn.close(), 150);
         }
         return;
@@ -370,16 +523,17 @@ function initHostPeer() {
       if (dualState.activeDirectorConn === conn) {
         dualState.activeDirectorConn = null;
         setHostConnectionUi(false);
-        showToast(els.toastContainer, "⚠️ 導播控制台已斷開連線", true);
+        showToast(els.toastContainer, t("connDisconnected"), true);
       }
     });
   });
 
   peer.on("error", (err) => {
     if (err?.type === "unavailable-id") {
+      showToast(els.toastContainer, t("toastRoomIdConflict"), true);
       initHostPeer();
     } else {
-      showToast(els.toastContainer, `⚠️ 信令連線異常：${err?.type || "網路錯誤"}`, true);
+      showToast(els.toastContainer, `${t("connDisconnected")} (${err?.type || "network"})`, true);
     }
   });
 }
@@ -396,6 +550,10 @@ function clearArmedJump() {
 }
 
 function renderDirectorIndexOnly({ currentIndex, isPlaying, total }) {
+  if (dualState.lastDirectorState) {
+    dualState.lastDirectorState.currentIndex = currentIndex;
+    dualState.lastDirectorState.isPlaying = isPlaying;
+  }
   const totalCount = total || els.directorScriptList.children.length || 1;
   const safeIdx = Math.max(0, Math.min(currentIndex ?? 0, totalCount - 1));
 
@@ -415,9 +573,11 @@ function renderDirectorIndexOnly({ currentIndex, isPlaying, total }) {
 }
 
 function renderDirectorFullState(stateMsg) {
+  dualState.lastDirectorState = { ...stateMsg };
   const { items = [], rawScript = "", currentIndex = 0, isPlaying = false, mode = "popup", visualState } = stateMsg;
 
-  els.directorMetaBadge.textContent = `${items.length} 句 · ${mode === "popup" ? "逐句模式" : "滾動模式"}`;
+  const modeLabel = mode === "popup" ? t("metaModePopup") : t("metaModeScroll");
+  els.directorMetaBadge.textContent = `${items.length} · ${modeLabel}`;
 
   if (document.activeElement !== els.directorLiveTextarea) {
     els.directorLiveTextarea.value = rawScript;
@@ -448,6 +608,10 @@ function renderDirectorFullState(stateMsg) {
       clearArmedJump();
       dualState.armedIdx = idx;
       div.classList.add("armed");
+      if (Date.now() - dualState.lastArmHintAt > 5000) {
+        dualState.lastArmHintAt = Date.now();
+        showToast(els.toastContainer, t("toastDoubleClickHint"));
+      }
       dualState.armedTimer = setTimeout(() => clearArmedJump(), 2500);
     });
 
@@ -459,14 +623,29 @@ function renderDirectorFullState(stateMsg) {
 }
 
 function sendDirectorCommand(payload) {
-  if (!dualState.directorConn?.open) {
-    showToast(els.toastContainer, "⚠️ 尚未連線至提詞螢幕端", true);
+  if (dualState.directorConn?.open) {
+    dualState.directorConn.send(payload);
     return;
   }
-  dualState.directorConn.send(payload);
+  if (dualState.directorBc) {
+    dualState.directorBc.postMessage({
+      ...payload,
+      sessionId: dualState.directorSessionId
+    });
+    return;
+  }
+  showToast(els.toastContainer, t("toastDirectorConnFail"), true);
+}
+
+function clearConnectTimeout() {
+  if (dualState.connectTimeoutId !== null) {
+    clearTimeout(dualState.connectTimeoutId);
+    dualState.connectTimeoutId = null;
+  }
 }
 
 function destroyDirectorPeer() {
+  clearConnectTimeout();
   clearArmedJump();
   if (dualState.directorConn) {
     try {
@@ -480,82 +659,172 @@ function destroyDirectorPeer() {
     } catch {}
     dualState.directorPeer = null;
   }
+  if (dualState.directorBc) {
+    try {
+      dualState.directorBc.postMessage({
+        type: "DIRECTOR_BYE",
+        sessionId: dualState.directorSessionId
+      });
+      dualState.directorBc.close();
+    } catch {}
+    dualState.directorBc = null;
+  }
 }
 
-function connectDirector() {
+function handleAuthError(msg) {
+  els.connectDirectorBtn.disabled = false;
+  setDirectorStatusUi("connDisconnected", false);
+
+  let errText;
+  if (msg.reason === "LOCKED") {
+    errText = t("toastPinLocked", msg.remainingSec ?? 300);
+  } else if (msg.reason === "ROOM_LOCKED") {
+    errText = t("toastRoomLocked");
+  } else {
+    errText = t("toastInvalidPin", msg.remaining ?? 0);
+  }
+  showToast(els.toastContainer, errText, true);
+  destroyDirectorPeer();
+}
+
+function handleDirectorInbound(msg) {
+  if (!msg || typeof msg !== "object") return;
+
+  if (msg.type === "AUTH_OK") {
+    clearConnectTimeout();
+    els.connectDirectorBtn.disabled = false;
+    setDirectorStatusUi("connConnected", true);
+    els.editorView.classList.add("hidden");
+    els.directorView.classList.remove("hidden");
+    return;
+  }
+
+  if (msg.type === "AUTH_ERR") {
+    handleAuthError(msg);
+    return;
+  }
+
+  if (msg.type === "SCRIPT_REJECTED" && msg.reason === "TOO_LONG") {
+    showToast(els.toastContainer, t("toastScriptTooLong"), true);
+    return;
+  }
+
+  if (msg.type === "FULL_STATE") {
+    renderDirectorFullState(msg);
+  } else if (msg.type === "STATE_INDEX") {
+    renderDirectorIndexOnly(msg);
+  }
+}
+
+async function connectDirector() {
   const room = els.joinRoomInput.value.trim().toUpperCase();
   const pin = els.joinPinInput.value.trim();
 
-  if (room.length !== 6 || pin.length !== 6) {
-    showToast(els.toastContainer, "⚠️ 請輸入完整的 6 位房號與 6 位數字 PIN", true);
-    return;
-  }
-  if (!PeerCtor) {
-    showToast(els.toastContainer, "⚠️ 找不到 PeerJS 模組，無法建立連線", true);
+  if (room.length !== 6 || !/^\d{6}$/.test(pin)) {
+    showToast(els.toastContainer, t("toastInvalidRoom"), true);
     return;
   }
 
   destroyDirectorPeer();
   els.connectDirectorBtn.disabled = true;
-  els.directorConnStatus.classList.remove("connected");
-  els.directorConnStatus.textContent = "⏳ 驗證連線中...";
+  setDirectorStatusUi("connVerifying", false);
+
+  let handshakeSettled = false;
+
+  // 1. 優先嘗試同機雙分頁 BroadcastChannel 握手
+  if ("BroadcastChannel" in window) {
+    const bc = new BroadcastChannel(`${BC_PREFIX}${room}`);
+    dualState.directorBc = bc;
+    bc.onmessage = (ev) => {
+      const msg = ev.data;
+      if (!msg || msg.targetSessionId !== dualState.directorSessionId) return;
+      if (msg.type === "AUTH_OK" || msg.type === "AUTH_ERR") {
+        handshakeSettled = true;
+        // 同機已直連成功，關閉多餘的跨裝置 Peer 避免雙重指令
+        if (dualState.directorPeer) {
+          try {
+            dualState.directorPeer.destroy();
+          } catch {}
+          dualState.directorPeer = null;
+          dualState.directorConn = null;
+        }
+      }
+      handleDirectorInbound(msg);
+    };
+    bc.postMessage({
+      type: "AUTH",
+      pin,
+      sessionId: dualState.directorSessionId
+    });
+  }
+
+  // 2. 同步檢查並嘗試跨裝置 PeerJS WebRTC 握手
+  const PeerCtor = await resolvePeerCtor();
+  if (handshakeSettled) return;
+
+  if (!PeerCtor) {
+    // 若無 PeerJS SDK，給予同機分頁 600ms 響應窗口，無回應則提示缺少 SDK
+    dualState.connectTimeoutId = setTimeout(() => {
+      if (handshakeSettled) return;
+      els.connectDirectorBtn.disabled = false;
+      setDirectorStatusUi("connDisconnected", false);
+      showToast(els.toastContainer, t("toastSdkMissing"), true);
+      destroyDirectorPeer();
+    }, 600);
+    return;
+  }
+
+  dualState.connectTimeoutId = setTimeout(() => {
+    if (handshakeSettled) return;
+    els.connectDirectorBtn.disabled = false;
+    setDirectorStatusUi("connDisconnected", false);
+    showToast(els.toastContainer, t("toastConnTimeout"), true);
+    destroyDirectorPeer();
+  }, CONNECT_TIMEOUT_MS);
 
   const peer = new PeerCtor();
   dualState.directorPeer = peer;
 
   peer.on("open", () => {
+    if (handshakeSettled) return;
     const conn = peer.connect(`${PEER_PREFIX}${room}`, { reliable: true });
     dualState.directorConn = conn;
 
     conn.on("open", () => {
-      conn.send({ type: "AUTH", pin });
+      conn.send({
+        type: "AUTH",
+        pin,
+        sessionId: dualState.directorSessionId
+      });
     });
 
     conn.on("data", (msg) => {
-      if (!msg || typeof msg !== "object") return;
-
-      if (msg.type === "AUTH_OK") {
-        els.connectDirectorBtn.disabled = false;
-        els.directorConnStatus.classList.add("connected");
-        els.directorConnStatus.textContent = "🟢 已驗證連線";
-        els.editorView.classList.add("hidden");
-        els.directorView.classList.remove("hidden");
-        return;
+      if (msg?.type === "AUTH_OK" || msg?.type === "AUTH_ERR") {
+        handshakeSettled = true;
+        if (dualState.directorBc) {
+          try {
+            dualState.directorBc.close();
+          } catch {}
+          dualState.directorBc = null;
+        }
       }
-
-      if (msg.type === "AUTH_ERR") {
-        els.connectDirectorBtn.disabled = false;
-        const errText =
-          msg.reason === "LOCKED"
-            ? "🔒 提詞端已鎖定連線（請在提詞端解除鎖定或 5 分鐘後重試）"
-            : `❌ PIN 碼錯誤（剩餘 ${msg.remaining ?? 0} 次機會）`;
-        showToast(els.toastContainer, errText, true);
-        destroyDirectorPeer();
-        return;
-      }
-
-      if (msg.type === "FULL_STATE") {
-        renderDirectorFullState(msg);
-      } else if (msg.type === "STATE_INDEX") {
-        renderDirectorIndexOnly(msg);
-      }
+      handleDirectorInbound(msg);
     });
 
     conn.on("close", () => {
+      if (!handshakeSettled) return;
       els.connectDirectorBtn.disabled = false;
-      els.directorConnStatus.classList.remove("connected");
-      els.directorConnStatus.textContent = "🔴 連線已中斷";
-      showToast(els.toastContainer, "⚠️ 與提詞螢幕端的連線已中斷", true);
+      setDirectorStatusUi("connDisconnected", false);
+      showToast(els.toastContainer, t("connDisconnected"), true);
     });
   });
 
-  peer.on("error", (err) => {
+  peer.on("error", () => {
+    if (handshakeSettled) return;
+    clearConnectTimeout();
     els.connectDirectorBtn.disabled = false;
-    const msg =
-      err?.type === "peer-unavailable"
-        ? "❌ 找不到該房號，請確認提詞端已開啟雙機頁面"
-        : `⚠️ 連線失敗：${err?.type || "網路異常"}`;
-    showToast(els.toastContainer, msg, true);
+    setDirectorStatusUi("connDisconnected", false);
+    showToast(els.toastContainer, t("toastDirectorConnFail"), true);
     destroyDirectorPeer();
   });
 }
@@ -575,7 +844,7 @@ function selectRole(role) {
     els.storageBar.classList.remove("hidden");
     els.editorSettingsGrid.classList.remove("hidden");
     els.startBtn.classList.remove("hidden");
-    if (!dualState.hostPeer) initHostPeer();
+    if (!dualState.hostPeer && !dualState.hostBc) initHostPeer();
   } else {
     // 註 1：導播後台的 dir-contrast-btn 預設隨 body.high-contrast 亮燈，
     // 連線後會由 renderDirectorFullState() 依據提詞端實際 visualState 動態同步。
@@ -616,22 +885,36 @@ els.roleTabs.forEach((tab) => {
 els.copyLinkBtn.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(buildPairUrl());
-    showToast(els.toastContainer, "🔗 已複製含 PIN 導播連線網址");
+    showToast(els.toastContainer, t("toastLinkCopied"));
   } catch {
-    showToast(els.toastContainer, "⚠️ 無法存取剪貼簿，請手動掃描 QR Code", true);
+    showToast(els.toastContainer, t("toastQrTooLong"), true);
   }
 });
 
 els.resetPairBtn.addEventListener("click", () => {
   initHostPeer();
-  showToast(els.toastContainer, "🔄 已重新產生房號與 PIN");
+  showToast(els.toastContainer, t("toastPairReset"));
 });
 
 els.unlockDirectorBtn.addEventListener("click", () => {
   dualState.failedPinAttempts = 0;
   dualState.lockoutUntil = 0;
-  els.unlockDirectorBtn.classList.add("hidden");
-  showToast(els.toastContainer, "🔓 已解除導播連線鎖定");
+  dualState.lockedDirectorSessionId = null;
+  updateUnlockButtonVisibility();
+  showToast(els.toastContainer, t("toastDirectorUnlocked"));
+});
+
+els.joinRoomInput.addEventListener("input", () => {
+  els.joinRoomInput.value = els.joinRoomInput.value.toUpperCase();
+});
+
+[els.joinRoomInput, els.joinPinInput].forEach((inputEl) => {
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      connectDirector();
+    }
+  });
 });
 
 els.connectDirectorBtn.addEventListener("click", connectDirector);
@@ -648,8 +931,12 @@ els.directorPushScriptBtn.addEventListener("click", () => {
     showToast(els.toastContainer, t("toastEmptyScript"), true);
     return;
   }
+  if (els.directorLiveTextarea.value.length > MAX_PUSH_SCRIPT_CHARS) {
+    showToast(els.toastContainer, t("toastScriptTooLong"), true);
+    return;
+  }
   sendDirectorCommand({ type: "CMD_PUSH_SCRIPT", rawScript: els.directorLiveTextarea.value });
-  showToast(els.toastContainer, "🚀 已推送更新至主播提詞器");
+  showToast(els.toastContainer, t("toastScriptPushed"));
 });
 
 els.dirPrevBtn.addEventListener("click", () => sendDirectorCommand({ type: "CMD_PREV" }));
@@ -706,8 +993,19 @@ els.lineHeightInput.addEventListener("input", () => {
 els.langBtn.addEventListener("click", () => {
   toggleLang();
   updateStats();
+  setHostConnectionUi(dualState.hostConnected);
+  setDirectorStatusUi(
+    dualState.directorStatusKey,
+    els.directorConnStatus.classList.contains("connected")
+  );
   if (engine.state.view === "prompter") {
     els.toggleBtn.textContent = engine.state.isPlaying ? t("ctrlPause") : t("ctrlResume");
+  }
+  if (dualState.lastDirectorState) {
+    const { items = [], mode = "popup", isPlaying = false } = dualState.lastDirectorState;
+    const modeLabel = mode === "popup" ? t("metaModePopup") : t("metaModeScroll");
+    els.directorMetaBadge.textContent = `${items.length} · ${modeLabel}`;
+    els.dirToggleBtn.textContent = isPlaying ? t("ctrlPause") : t("ctrlResume");
   }
 });
 
@@ -884,8 +1182,14 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+window.addEventListener("pagehide", () => {
+  destroyDirectorPeer();
+  destroyHostPeer();
+});
+
 applyTranslations();
 updateStats();
+initEasterEgg();
 
 const params = new URLSearchParams(window.location.search);
 const presetRoom = (params.get("room") || "").trim().toUpperCase();
