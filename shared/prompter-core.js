@@ -212,17 +212,19 @@ export class PrompterEngine {
     let activeNode = null;
 
     nodes.forEach((node, idx) => {
-      node.classList.remove("active", "revealed", "peek");
+      node.classList.remove("active", "revealed", "upcoming", "peek");
       if (idx < this.state.currentIndex) {
         node.classList.add("revealed");
       } else if (idx === this.state.currentIndex) {
         node.classList.add("active");
         activeNode = node;
+      } else {
+        node.classList.add("upcoming");
       }
     });
 
     if (activeNode) {
-      const targetOffset = activeNode.offsetTop - this.els.stageViewport.clientHeight * 0.34;
+      const targetOffset = activeNode.offsetTop - this.els.stageViewport.clientHeight * 0.28;
       const clampedY = Math.max(0, targetOffset);
       this.els.scrollTrack.style.transition = "transform 0.38s cubic-bezier(0.22, 1, 0.36, 1)";
       this.els.scrollTrack.style.transform = `translate3d(0, -${clampedY}px, 0)`;
