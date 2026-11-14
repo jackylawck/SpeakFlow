@@ -718,3 +718,62 @@ body.high-contrast .eyeline {
 .toast.error {
   border-left-color: var(--danger);
 }
+
+/* ================= 無 JS 降級提示 ================= */
+.noscript-warning {
+  background: #000000;
+  color: #facc15;
+  padding: 16px;
+  text-align: center;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* ================= 創作者致敬彩蛋：攝影棚 Tally Light 微光（WCAG 安全無閃爍） ================= */
+@keyframes sf-tally-onair {
+  0% { box-shadow: inset 0 0 0 0 rgba(239, 68, 68, 0); }
+  35% { box-shadow: inset 0 0 36px 4px rgba(239, 68, 68, 0.55); }
+  100% { box-shadow: inset 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+@keyframes sf-tally-scoop {
+  0% { box-shadow: inset 0 0 0 0 rgba(59, 130, 246, 0); }
+  35% { box-shadow: inset 0 0 36px 4px rgba(59, 130, 246, 0.55); }
+  100% { box-shadow: inset 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+@keyframes sf-tally-queen {
+  0% { box-shadow: inset 0 0 0 0 rgba(250, 204, 21, 0); }
+  35% { box-shadow: inset 0 0 38px 4px rgba(250, 204, 21, 0.55); }
+  100% { box-shadow: inset 0 0 0 0 rgba(250, 204, 21, 0); }
+}
+
+body.sf-fx-onair::after,
+body.sf-fx-scoop::after,
+body.sf-fx-queen::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+body.sf-fx-onair::after {
+  animation: sf-tally-onair 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+body.sf-fx-scoop::after {
+  animation: sf-tally-scoop 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+body.sf-fx-queen::after {
+  animation: sf-tally-queen 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.sf-fx-onair::after,
+  body.sf-fx-scoop::after,
+  body.sf-fx-queen::after {
+    animation: none;
+  }
+}
