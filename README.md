@@ -116,16 +116,6 @@ npx serve .
 
 ---
 
-### 開發者彩蛋 (DevTools Console)
-
-打開瀏覽器開發者工具（`F12` / `Cmd+Option+I`）切換至 **Console** 分頁，即可看到雙語資安提示與創作者致敬指令——無需輸入括號，直接輸入以下關鍵字並按 `Enter` 即可觸發攝影棚 Tally Light 微光與鼓勵語錄：
-
-* `ON_AIR`（或 `on_air`）
-* `SCOOP`（或 `scoop`）
-* `QUEEN`（或 `queen`）
-
----
-
 ## English Documentation
 
 ### Overview
@@ -194,16 +184,6 @@ node --test tests/*.test.mjs
 # Serve locally
 npx serve .
 ```
-
----
-
-### Developer Console Easter Egg
-
-Open browser DevTools (`F12` / `Cmd+Option+I`) and check the **Console** tab. Type any of the zero-parenthesis keywords below and press `Enter` to trigger studio tally-light glows and independent creator quotes:
-
-* `ON_AIR` (or `on_air`)
-* `SCOOP` (or `scoop`)
-* `QUEEN` (or `queen`)
 
 ---
 
