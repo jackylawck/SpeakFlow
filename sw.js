@@ -1,4 +1,4 @@
-const CACHE_VERSION = "speakflow-v2.1.1";
+const CACHE_VERSION = "speakflow-v2.1.2";
 
 const CORE_ASSETS = [
   "./",
@@ -19,8 +19,7 @@ const CORE_ASSETS = [
   "./shared/storage.js",
   "./shared/prompter-core.js",
   "./shared/easter-egg.js",
-  "./dual/qr-svg.js",
-  "./vendor/peerjs.esm.js"
+  "./dual/qr-svg.js"
 ];
 
 self.addEventListener("install", (event) => {
