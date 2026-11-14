@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#000000" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';" />
+  <title>順住講 SpeakFlow｜零後端雙語新聞提詞器</title>
+  <link rel="manifest" href="./manifest-solo.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="high-contrast">
+
+  <main id="editor-view">
+    <header class="top-bar">
+      <div class="title-group">
+        <h1 data-i18n="appTitle">🎙️ 順住講 SpeakFlow</h1>
+        <span class="badge" id="stats-badge">0 句 · 預計 0 秒</span>
+      </div>
+      <div class="header-actions">
+        <a href="./dual.html" class="btn-ghost link-btn" data-i18n="linkToDual">🎛️ 切換至雙機導播版</a>
+        <button type="button" class="btn-ghost" id="lang-btn">EN / 繁中</button>
+      </div>
+    </header>
+
+    <textarea id="script-input" data-i18n-placeholder="scriptPlaceholder" placeholder="貼上中文、英文或中英混排新聞稿..."></textarea>
+
+    <div class="storage-bar">
+      <span class="storage-hint" id="storage-status" data-i18n="storageSessionHint">🔒 目前僅暫存於分頁記憶體（關閉分頁即自動清除）</span>
+      <div class="storage-actions">
+        <button type="button" class="btn-small" id="save-local-btn" data-i18n="btnSaveLocal">💾 儲存至本機</button>
+        <button type="button" class="btn-small btn-danger-outline" id="clear-storage-btn" data-i18n="btnClearStorage">🗑️ 清除本機稿件</button>
+      </div>
+    </div>
+
+    <div class="settings-grid">
+      <div class="setting-item">
+        <label for="mode-select" data-i18n="labelMode">播報模式</label>
+        <select id="mode-select">
+          <option value="popup" selected data-i18n="modePopup">逐句動態彈出 (推薦)</option>
+          <option value="scroll" data-i18n="modeScroll">GPU 平滑滾動</option>
+        </select>
+      </div>
+
+      <div class="setting-item">
+        <label for="pacing-mode" data-i18n="labelPacing">計時策略</label>
+        <select id="pacing-mode">
+          <option value="dynamic" selected data-i18n="pacingDynamic">依字數自動配時</option>
+          <option value="fixed" data-i18n="pacingFixed">每句固定秒數</option>
+        </select>
+      </div>
+
+      <div class="setting-item">
+        <label for="speed-input" id="speed-label" data-i18n="labelSpeedCpm">語速 (字/分鐘)</label>
+        <input type="number" id="speed-input" value="210" min="60" max="500" step="10" />
+      </div>
+
+      <div class="setting-item">
+        <label for="fontsize-input">
+          <span data-i18n="labelFontSize">字體大小</span>
+          <span id="fs-val">48px</span>
+        </label>
+        <input type="range" id="fontsize-input" value="48" min="24" max="96" step="2" />
+      </div>
+
+      <div class="setting-item">
+        <label for="lineheight-input">
+          <span data-i18n="labelLineHeight">行距倍率</span>
+          <span id="lh-val">1.6</span>
+        </label>
+        <input type="range" id="lineheight-input" value="1.6" min="1.2" max="2.4" step="0.1" />
+      </div>
+    </div>
+
+    <button type="button" class="btn-primary" id="start-btn" data-i18n="btnStart">進入全螢幕讀稿</button>
+  </main>
+
+  <section id="prompter-view" class="hidden">
+    <div class="eyeline" id="eyeline"></div>
+
+    <div id="mic-bar-wrap" class="hidden">
+      <span id="mic-status-text" data-i18n="micListening">🎙️ 聆聽中</span>
+      <div class="mic-meter"><div id="mic-level-fill"></div></div>
+    </div>
+
+    <div id="stage-viewport">
+      <div id="scroll-track"></div>
+    </div>
+
+    <div class="controls">
+      <button type="button" class="ctrl-btn" id="back-btn" data-i18n="ctrlBack">✏️ 改稿</button>
+      <button type="button" class="ctrl-btn ppt-nav" id="prev-btn" data-i18n="ctrlPrev">⬆️ 上一句</button>
+      <button type="button" class="ctrl-btn play" id="toggle-btn" data-i18n="ctrlPause">⏸ 暫停</button>
+      <button type="button" class="ctrl-btn ppt-nav primary-nav" id="next-btn" data-i18n="ctrlNextPpt">⬇️ 下一句 (PPT)</button>
+      <button type="button" class="ctrl-btn" id="mic-btn" data-i18n="ctrlMic">🎙️ 音壓跟讀</button>
+      <button type="button" class="ctrl-btn active-state" id="contrast-btn" data-i18n="ctrlContrast">🌗 高對比</button>
+      <button type="button" class="ctrl-btn" id="eyeline-btn" data-i18n="ctrlEyeline">📏 基準線</button>
+      <button type="button" class="ctrl-btn" id="mirror-x-btn" data-i18n="ctrlMirrorX">↔️ 水平鏡像</button>
+      <button type="button" class="ctrl-btn" id="mirror-y-btn" data-i18n="ctrlMirrorY">↕️ 垂直翻轉</button>
+      <button type="button" class="ctrl-btn" id="restart-btn" data-i18n="ctrlRestart">🔄 重來</button>
+      <span class="status-pill" id="progress-label">1 / 1</span>
+    </div>
+  </section>
+
+  <div id="mic-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="mic-modal-title">
+    <div class="modal-card">
+      <h2 id="mic-modal-title" data-i18n="micModalTitle">🎙️ 麥克風權限說明（建議獨處靜音環境使用）</h2>
+      <p data-i18n="micModalBody">音壓跟讀功能會使用麥克風偵測您的說話音量，以實現「開口自動推進、停頓自動暫停」。所有音訊僅在您的裝置本機記憶體中即時分析，絕不錄製、不儲存、亦不上傳至任何伺服器。</p>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="mic-cancel-btn" data-i18n="btnCancel">取消</button>
+        <button type="button" class="btn-primary" id="mic-confirm-btn" data-i18n="btnAgreeEnable">同意並啟用</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" aria-live="polite"></div>
+
+  <script type="module" src="./app-solo.js"></script>
+</body>
+</html>
