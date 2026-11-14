@@ -15,6 +15,10 @@ export class SmoothScrollEngine {
     this.running = false;
     this.canAdvanceFn = () => true;
 
+    // 快取佈局計算結果，避免 Layout Thrashing
+    this.maxScroll = 100;
+    this.pxPerSec = 0;
+
     this._touchStartY = 0;
     this._bindGestures();
   }
@@ -23,16 +27,24 @@ export class SmoothScrollEngine {
     this.totalDurationSec = Math.max(5, totalDurationMs / 1000);
     this.canAdvanceFn = canAdvanceFn;
     this.reset();
+    this.updateBounds();
+  }
+
+  updateBounds() {
+    // 將 DOM 高度讀取移出 60fps 的渲染迴圈，僅在啟動與配置時計算
+    this.maxScroll = Math.max(100, this.trackEl.scrollHeight - this.viewportEl.clientHeight * 0.5);
+    this.pxPerSec = this.maxScroll / this.totalDurationSec;
   }
 
   reset() {
     this.translateY = 0;
     this.trackEl.style.transition = "none";
-    this.trackEl.style.transform = "translate3d(0, 0, 0)";
+    this._applyTransform();
   }
 
   start() {
     if (this.running) return;
+    this.updateBounds(); // 確保啟動時根據最新字體/行距取得正確高度
     this.running = true;
     this.lastFrameTime = 0;
     this.rafId = requestAnimationFrame((ts) => this._tick(ts));
@@ -53,21 +65,23 @@ export class SmoothScrollEngine {
     this.lastFrameTime = timestamp;
 
     if (this.canAdvanceFn()) {
-      const maxScroll = Math.max(100, this.trackEl.scrollHeight - this.viewportEl.clientHeight * 0.5);
-      const pxPerSec = maxScroll / this.totalDurationSec;
-      this.translateY += pxPerSec * dt;
+      this.translateY += this.pxPerSec * dt;
 
-      if (this.translateY >= maxScroll) {
-        this.translateY = maxScroll;
-        this.trackEl.style.transform = `translate3d(0, -${this.translateY}px, 0)`;
+      if (this.translateY >= this.maxScroll) {
+        this.translateY = this.maxScroll;
+        this._applyTransform();
         this.stop();
         this.onComplete?.();
         return;
       }
-      this.trackEl.style.transform = `translate3d(0, -${this.translateY}px, 0)`;
+      this._applyTransform();
     }
 
     this.rafId = requestAnimationFrame((ts) => this._tick(ts));
+  }
+
+  _applyTransform() {
+    this.trackEl.style.transform = `translate3d(0, -${this.translateY}px, 0)`;
   }
 
   _bindGestures() {
@@ -88,8 +102,10 @@ export class SmoothScrollEngine {
         e.preventDefault();
         const deltaY = this._touchStartY - e.touches[0].clientY;
         this._touchStartY = e.touches[0].clientY;
-        this.translateY = Math.max(0, this.translateY + deltaY);
-        this.trackEl.style.transform = `translate3d(0, -${this.translateY}px, 0)`;
+        
+        // 加入 maxScroll 雙向邊界防護
+        this.translateY = Math.max(0, Math.min(this.translateY + deltaY, this.maxScroll));
+        this._applyTransform();
       },
       { passive: false }
     );
@@ -98,8 +114,9 @@ export class SmoothScrollEngine {
       "wheel",
       (e) => {
         if (!this.viewportEl.dataset.scrollMode) return;
-        this.translateY = Math.max(0, this.translateY + e.deltaY * 0.6);
-        this.trackEl.style.transform = `translate3d(0, -${this.translateY}px, 0)`;
+        // 加入 maxScroll 雙向邊界防護
+        this.translateY = Math.max(0, Math.min(this.translateY + e.deltaY * 0.6, this.maxScroll));
+        this._applyTransform();
       },
       { passive: true }
     );
