@@ -9,8 +9,8 @@
   --danger: #ef4444;
   --success: #10b981;
   --border: #262c38;
-  --font-size: 46px;
-  --line-height: 1.55;
+  --font-size: 52px;
+  --line-height: 1.5;
 }
 
 body.high-contrast {
@@ -402,9 +402,10 @@ body.high-contrast .eyeline {
   transform: scale(-1, -1);
 }
 
+/* 左右僅留 2vw 極窄邊距，盡用整個螢幕寬度 */
 #scroll-track {
   width: 100%;
-  padding: 26vh 3vw 58vh;
+  padding: 25vh 2vw 58vh;
   will-change: transform;
 }
 
@@ -412,10 +413,11 @@ body.high-contrast .eyeline {
   display: block;
   font-size: var(--font-size);
   line-height: var(--line-height);
-  margin-bottom: 0.7em;
+  margin-bottom: 0.65em;
   color: var(--upcoming-text);
-  transition: font-size 0.25s ease, color 0.25s ease, opacity 0.25s ease;
+  transition: font-size 0.22s ease, color 0.22s ease;
   cursor: pointer;
+  word-break: break-word;
 }
 
 .chunk.revealed {
@@ -430,13 +432,14 @@ body.high-contrast .eyeline {
   color: var(--upcoming-text);
 }
 
+/* 當前要讀的白色字：固定放大 1.38 倍（預設約 72px），飽滿易讀且不隨句長亂跳 */
 .chunk.active {
-  font-size: calc(var(--font-size) * 1.2);
-  line-height: 1.48;
+  font-size: calc(var(--font-size) * 1.38);
+  line-height: 1.42;
   color: var(--text);
   font-weight: 700;
-  margin-top: 0.15em;
-  margin-bottom: 0.8em;
+  margin-top: 0.12em;
+  margin-bottom: 0.72em;
 }
 
 .smooth-text {
